@@ -1,0 +1,46 @@
+{
+	"name": "ahk64",
+	"version": "2.0.19",
+	"description": "autohotkey64 binary",
+	"author": {
+		"name": "xianii",
+		"email": "jiyucheng007@gmail.com"
+	},
+	"bin": {
+		"ahk64": "./cli.js",
+		"autohotkey": "./bin/AutoHotkey64.exe",
+		"ahk2exe": "./bin/Ahk2Exe.exe"
+	},
+	"keywords": [
+		"autohotkey",
+		"win32",
+		"compiler",
+		"ahk",
+		"windows",
+		"toolchain",
+		"binary"
+	],
+	"os": [
+		"win32"
+	],
+	"cpu": [
+		"x64"
+	],
+	"homepage": "https://github.com/Nigh/AHK-npm#readme",
+	"bugs": {
+		"url": "https://github.com/Nigh/AHK-npm/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Nigh/AHK-npm.git"
+	},
+	"license": "GPL-2.0",
+	"type": "module",
+	"scripts": {
+		"ahk64": "node cli.js"
+	},
+	"files": [
+		"bin/",
+		"cli.js"
+	]
+}
