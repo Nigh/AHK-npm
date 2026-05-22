@@ -1,128 +1,134 @@
-
 # ahk64
 
-A lightweight **AutoHotkey 64-bit toolchain** for Windows.
-This package bundles the official AutoHotkey runtime, compiler, and mpress packer so you can **run or compile AHK scripts inside a Node.js build pipeline** (e.g. from `npm scripts`, CI/CD jobs, or other automation).
+[![npm version](https://img.shields.io/npm/v/ahk64.svg)](https://www.npmjs.com/package/ahk64)
+[![npm downloads](https://img.shields.io/npm/dm/ahk64.svg)](https://www.npmjs.com/package/ahk64)
+[![license](https://img.shields.io/npm/l/ahk64.svg)](LICENSE)
 
-## ✨ Features
+`ahk64` packages a ready-to-use AutoHotkey toolchain for Windows x64 so you can run and compile `.ahk` scripts directly from Node.js workflows, npm scripts, and CI pipelines.
 
-* **Run** `.ahk` scripts via the 64-bit AutoHotkey interpreter.
-* **Compile** `.ahk` scripts into standalone `.exe` files using `Ahk2Exe`.
-* Works seamlessly inside `npm`/`yarn`/`pnpm` scripts—no separate installer needed.
+## Why this package
 
-## 📦 Installation
+- No separate AutoHotkey installer required in CI.
+- Reproducible builds by pinning package versions in your lockfile.
+- Includes runtime, compiler, and packer binaries under a single npm package.
+- Friendly CLI wrapper (`ahk64`) plus direct binary commands (`autohotkey`, `ahk2exe`).
+
+## Requirements
+
+- OS: Windows (`win32`)
+- CPU: x64
+- Node.js: 16+
+
+`package.json` also enforces these platform constraints via `os` and `cpu`.
+
+## Installation
 
 ```bash
 npm install --save-dev ahk64
 ```
 
-> Only Windows x64 is supported (`"os": ["win32"]`, `"cpu": ["x64"]`).
+For one-off usage without installing:
 
+```bash
+npx ahk64 run path/to/script.ahk
+```
 
-## 🚀 Usage in package.json scripts
+## Quick start
 
-Example `package.json`:
+Add scripts to your project:
 
-```jsonc
+```json
 {
   "scripts": {
-    "run:ahk": "ahk64 run src/my-script.ahk",
-    "build:ahk": "ahk64 compile src/my-script.ahk /out dist/my-script.exe"
+    "ahk:run": "ahk64 run scripts/main.ahk",
+    "ahk:build": "ahk64 compile scripts/main.ahk /out dist/main.exe"
   }
 }
 ```
 
-Run from the command line:
+Then run:
 
 ```bash
-npm run run:ahk
-npm run build:ahk
+npm run ahk:run
+npm run ahk:build
 ```
 
-or directly with `npx`:
+## CLI reference
+
+Syntax:
 
 ```bash
-npx ahk64 compile src/my-script.ahk
-```
-
----
-
-## 🛠 CLI Syntax
-
-```
 ahk64 <command> [args...]
 ```
 
-### Commands
+| Command | Binary | Description |
+| --- | --- | --- |
+| `run` | `AutoHotkey64.exe` | Run a script with AutoHotkey runtime. |
+| `compile` | `Ahk2Exe.exe` | Compile a script to `.exe`; wrapper automatically injects `/base` with bundled `AutoHotkey64.exe`. |
+| `mpress` | `mpress.exe` | Compress an existing executable. |
 
-| Command   | Underlying binary       | Typical use                                                                                       |
-| --------- | ----------------------- | ------------------------------------------------------------------------------------------------- |
-| `run`     | `AutoHotkey64.exe`      | Run a `.ahk` script.                                                                              |
-| `compile` | `Ahk2Exe.exe`           | Compile a `.ahk` script to `.exe`. Automatically sets `/base` to the included `AutoHotkey64.exe`. |
+All additional arguments are passed through to the underlying binary.
 
-All remaining arguments are passed straight to the underlying tool.
-
-**Examples**
+Examples:
 
 ```bash
-# Compile with custom output path
-npx ahk64 compile src/hotkeys.ahk /out dist/hotkeys.exe
+# Run script
+npx ahk64 run scripts/hotkeys.ahk
 
-# Run a script directly
-npx ahk64 run src/hotkeys.ahk
+# Compile script
+npx ahk64 compile scripts/hotkeys.ahk /out dist/hotkeys.exe
 
-# Compress an existing exe
+# Compress compiled exe
 npx ahk64 mpress dist/hotkeys.exe
 ```
 
-## 📁 Included Binaries
+## Included binaries
 
-The package ships these files inside `bin/`:
+The package publishes:
 
-* `AutoHotkey64.exe`
-* `Ahk2Exe.exe`
-* `mpress.exe`
+- `bin/AutoHotkey64.exe`
+- `bin/Ahk2Exe.exe`
+- `bin/mpress.exe`
+- `cli.js`
 
----
+## CI/CD and release automation (maintainers)
 
-## 🔄 Maintainer automation
+This repository includes automated release workflows:
 
-This repository includes two GitHub Actions workflows:
+- `.github/workflows/sync-ahk-release.yml`
+  - Runs weekly and by manual dispatch.
+  - Fetches latest release from `AutoHotkey/AutoHotkey`.
+  - Downloads `AutoHotkey_<version>.zip`, extracts `AutoHotkey64.exe`, updates `package.json` version, commits, and pushes.
+  - Creates and pushes a matching git tag: `vX.Y.Z`.
 
-* `.github/workflows/sync-ahk-release.yml`
-  * Runs weekly (and via manual dispatch).
-  * Checks the latest AutoHotkey release.
-  * If a new version is found, it downloads `AutoHotkey_<version>.zip`, extracts only `AutoHotkey64.exe`, bumps `package.json` version, and pushes to the default branch.
-  * It also creates and pushes a matching git tag (`vX.Y.Z`) after the sync commit.
-* `.github/workflows/publish-npm.yml`
-  * Runs on pushes that change `bin/**` or `package.json`.
-  * Publishes with npm Trusted Publisher (`id-token: write` + `npm publish --provenance`).
-  * Safely skips when the exact version is already published.
+- `.github/workflows/publish-npm.yml`
+  - Triggered by pushed tags matching `v*` (or manual dispatch).
+  - Publishes using npm Trusted Publisher + provenance (`npm publish --provenance --access public`).
+  - Skips publish if the target version already exists on npm.
 
-### One-time setup checklist
+One-time maintainer setup:
 
-1. In npm package settings, enable **Trusted Publisher** for this GitHub repository.
-2. Bind the publisher to the workflow file `.github/workflows/publish-npm.yml` on your default branch.
-3. In GitHub repository settings, ensure Actions can write to the default branch (or adjust branch protection to allow workflow bot pushes).
-4. Manually run `Sync AutoHotkey Release` once from the Actions tab to verify end-to-end behavior.
+1. Enable npm Trusted Publisher for this repository.
+2. Bind publisher to `.github/workflows/publish-npm.yml` on default branch.
+3. Ensure GitHub Actions can push commits/tags (or adjust branch protection rules).
+4. Manually trigger sync workflow once to verify end-to-end behavior.
 
----
+## FAQ
 
-## ⚠ Notes
+### Why is installation blocked on macOS/Linux?
 
-* The package is intended for automated **build scripts**, not for interactive editing.
-* Requires **Node.js 16+** (ESM support).
-* Windows x64 only.
+This package is intentionally Windows x64 only because it ships Windows executables. npm will skip install on unsupported platforms due to package `os/cpu` constraints.
 
----
+### How do I make builds reproducible?
 
-## 📜 License
+Commit your lockfile (`package-lock.json`, `pnpm-lock.yaml`, or `yarn.lock`) so CI always resolves the same `ahk64` version and bundled binaries.
 
-This npm package is distributed under the **GPL-2.0** license.
-AutoHotkey binaries are redistributed under their respective licenses.
+## License
 
----
+- Package license: GPL-2.0
+- Bundled AutoHotkey binaries remain under their respective upstream licenses
 
-**Repository:** [https://github.com/Nigh/AHK-npm](https://github.com/Nigh/AHK-npm)
+## Links
 
-> Tip: If you commit your `package-lock.json` or `pnpm-lock.yaml`, your CI builds will always use the exact same AutoHotkey binaries for reproducible results.
+- npm: [https://www.npmjs.com/package/ahk64](https://www.npmjs.com/package/ahk64)
+- repository: [https://github.com/Nigh/AHK-npm](https://github.com/Nigh/AHK-npm)

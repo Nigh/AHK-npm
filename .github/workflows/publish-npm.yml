@@ -2,12 +2,8 @@ name: Publish npm package
 
 on:
   push:
-    branches:
-      - main
-      - master
-    paths:
-      - "bin/**"
-      - "package.json"
+    tags:
+      - "v*"
   workflow_dispatch:
 
 permissions:
