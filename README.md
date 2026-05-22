@@ -85,6 +85,29 @@ The package ships these files inside `bin/`:
 
 ---
 
+## 🔄 Maintainer automation
+
+This repository includes two GitHub Actions workflows:
+
+* `.github/workflows/sync-ahk-release.yml`
+  * Runs weekly (and via manual dispatch).
+  * Checks the latest AutoHotkey release.
+  * If a new version is found, it downloads `AutoHotkey_<version>.zip`, extracts only `AutoHotkey64.exe`, bumps `package.json` version, and pushes to the default branch.
+  * It also creates and pushes a matching git tag (`vX.Y.Z`) after the sync commit.
+* `.github/workflows/publish-npm.yml`
+  * Runs on pushes that change `bin/**` or `package.json`.
+  * Publishes with npm Trusted Publisher (`id-token: write` + `npm publish --provenance`).
+  * Safely skips when the exact version is already published.
+
+### One-time setup checklist
+
+1. In npm package settings, enable **Trusted Publisher** for this GitHub repository.
+2. Bind the publisher to the workflow file `.github/workflows/publish-npm.yml` on your default branch.
+3. In GitHub repository settings, ensure Actions can write to the default branch (or adjust branch protection to allow workflow bot pushes).
+4. Manually run `Sync AutoHotkey Release` once from the Actions tab to verify end-to-end behavior.
+
+---
+
 ## ⚠ Notes
 
 * The package is intended for automated **build scripts**, not for interactive editing.
