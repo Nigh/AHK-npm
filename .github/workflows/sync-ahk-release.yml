@@ -1,0 +1,134 @@
+name: Sync AutoHotkey Release
+
+on:
+  schedule:
+    - cron: "0 2 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-ahk-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Fetch latest AutoHotkey release
+        id: release
+        run: |
+          curl -fsSL "https://api.github.com/repos/AutoHotkey/AutoHotkey/releases/latest" -o release.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const outputPath = process.env.GITHUB_OUTPUT;
+          const release = JSON.parse(fs.readFileSync('release.json', 'utf8'));
+          const tag = release.tag_name || '';
+          if (!/^v?\d+\.\d+\.\d+$/.test(tag)) {
+            throw new Error(`Unexpected release tag: ${tag}`);
+          }
+          const version = tag.replace(/^v/, '');
+          const expectedZipName = `AutoHotkey_${version}.zip`;
+          const assets = release.assets || [];
+          const asset = assets.find(item => item.name === expectedZipName)
+            || assets.find(item => /^AutoHotkey_.*\.zip$/.test(item.name || ''));
+          if (!asset?.browser_download_url) {
+            throw new Error(`Release asset ${expectedZipName} (or AutoHotkey_*.zip) not found`);
+          }
+          fs.appendFileSync(outputPath, `tag=${tag}\n`);
+          fs.appendFileSync(outputPath, `version=${version}\n`);
+          fs.appendFileSync(outputPath, `asset_name=${asset.name}\n`);
+          fs.appendFileSync(outputPath, `asset_url=${asset.browser_download_url}\n`);
+          NODE
+
+      - name: Compare versions
+        id: compare
+        run: |
+          current_version="$(node -e "const fs=require('node:fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); process.stdout.write(pkg.version);")"
+          echo "current_version=${current_version}" >> "$GITHUB_OUTPUT"
+          if [ "${current_version}" = "${{ steps.release.outputs.version }}" ]; then
+            echo "should_update=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_update=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download AutoHotkey release package
+        if: steps.compare.outputs.should_update == 'true'
+        run: |
+          curl -fL "${{ steps.release.outputs.asset_url }}" -o "autohotkey-release.zip"
+
+      - name: Extract AutoHotkey64.exe from release package
+        if: steps.compare.outputs.should_update == 'true'
+        run: |
+          exe_path="$(unzip -Z1 "autohotkey-release.zip" | rg "AutoHotkey64\\.exe$" | sed -n '1p')"
+          if [ -z "${exe_path}" ]; then
+            echo "::error::AutoHotkey64.exe not found in release package."
+            exit 1
+          fi
+          unzip -p "autohotkey-release.zip" "${exe_path}" > "bin/AutoHotkey64.exe"
+
+      - name: Validate AutoHotkey64.exe format
+        if: steps.compare.outputs.should_update == 'true'
+        run: |
+          if [ "$(xxd -l 2 -p "bin/AutoHotkey64.exe")" != "4d5a" ]; then
+            echo "::error::Downloaded AutoHotkey64.exe does not have a valid MZ header."
+            exit 1
+          fi
+
+      - name: Update package.json version
+        if: steps.compare.outputs.should_update == 'true'
+        run: |
+          TARGET_VERSION="${{ steps.release.outputs.version }}" node <<'NODE'
+          const fs = require('node:fs');
+          const pkgPath = 'package.json';
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+          pkg.version = process.env.TARGET_VERSION;
+          fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, '\t')}\n`);
+          NODE
+
+      - name: Commit and push changes
+        if: steps.compare.outputs.should_update == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "bin/AutoHotkey64.exe" "package.json"
+          if git diff --cached --quiet; then
+            echo "No changes detected after update steps; nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore: sync AutoHotkey ${{ steps.release.outputs.tag }}"
+          git push
+          release_tag="v${{ steps.release.outputs.version }}"
+          if git rev-parse -q --verify "refs/tags/${release_tag}" > /dev/null; then
+            echo "Tag ${release_tag} already exists locally."
+            exit 0
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/${release_tag}" > /dev/null 2>&1; then
+            echo "Tag ${release_tag} already exists on remote."
+            exit 0
+          fi
+          git tag -a "${release_tag}" -m "Release ${release_tag}"
+          git push origin "${release_tag}"
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Sync AutoHotkey release"
+            echo ""
+            echo "- Current package version: \`${{ steps.compare.outputs.current_version || 'unknown' }}\`"
+            echo "- Latest upstream tag: \`${{ steps.release.outputs.tag || 'unknown' }}\`"
+            echo "- Target npm version: \`${{ steps.release.outputs.version || 'unknown' }}\`"
+            echo "- Downloaded asset: \`${{ steps.release.outputs.asset_name || 'none' }}\`"
+            echo "- Updated this run: \`${{ steps.compare.outputs.should_update || 'false' }}\`"
+            echo "- Synced git tag: \`v${{ steps.release.outputs.version || 'unknown' }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

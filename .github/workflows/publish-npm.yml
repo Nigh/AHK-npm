@@ -1,0 +1,65 @@
+name: Publish npm package
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "bin/**"
+      - "package.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-npm-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Read package identity
+        id: pkg
+        run: |
+          PACKAGE_NAME="$(node -e "const fs=require('node:fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); process.stdout.write(pkg.name);")"
+          PACKAGE_VERSION="$(node -e "const fs=require('node:fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); process.stdout.write(pkg.version);")"
+          echo "name=${PACKAGE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version=${PACKAGE_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if version already on npm
+        id: exists
+        run: |
+          if npm view "${{ steps.pkg.outputs.name }}@${{ steps.pkg.outputs.version }}" version > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish to npm with provenance
+        if: steps.exists.outputs.exists != 'true'
+        run: npm publish --provenance --access public
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## npm publish result"
+            echo ""
+            echo "- Package: \`${{ steps.pkg.outputs.name }}\`"
+            echo "- Version: \`${{ steps.pkg.outputs.version }}\`"
+            echo "- Already existed: \`${{ steps.exists.outputs.exists }}\`"
+            echo "- Publish attempted: \`${{ steps.exists.outputs.exists != 'true' }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
