@@ -17,10 +17,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "24"
 
@@ -69,7 +69,7 @@ jobs:
       - name: Extract AutoHotkey64.exe from release package
         if: steps.compare.outputs.should_update == 'true'
         run: |
-          exe_path="$(unzip -Z1 "autohotkey-release.zip" | rg "AutoHotkey64\\.exe$" | sed -n '1p')"
+          exe_path="$(unzip -Z1 "autohotkey-release.zip" | awk '/AutoHotkey64\.exe$/ { print; exit }')"
           if [ -z "${exe_path}" ]; then
             echo "::error::AutoHotkey64.exe not found in release package."
             exit 1
